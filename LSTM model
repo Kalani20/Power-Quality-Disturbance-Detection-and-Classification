@@ -1,0 +1,279 @@
+!pip install pandas==1.5.3 scikit-learn==1.2.2 category_encoders notebook==6.5.4 matplotlib==3.7.1 seaborn==0.12.2
+!pip install tensorflow
+import pandas as pd
+df = pd.read_csv("/kaggle/input/noise-data/Data13 with 40dB noise.csv")
+import tensorflow as tf
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from tensorflow.keras.utils import to_categorical
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
+import matplotlib.pyplot as plt
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping  # Import EarlyStopping
+import random
+
+# Set random seeds for reproducibility
+seed_value = 42
+random.seed(seed_value)
+np.random.seed(seed_value)
+tf.random.set_seed(seed_value)
+
+# Load data
+data = pd.read_csv('/kaggle/input/noise-data/Data13 with 40dB noise.csv', header=None)
+n_columns = data.shape[1]
+n_signals = n_columns - 1
+signals = data.iloc[:, :n_signals].values
+labels = data.iloc[:, -1].values
+
+# Handle missing values
+signals = np.nan_to_num(signals, nan=0.0)
+
+# Standardize signals
+scaler = StandardScaler()
+signals = scaler.fit_transform(signals)
+
+# Reshape for LSTM
+signals = signals.reshape(signals.shape[0], signals.shape[1], 1)
+
+# One-hot encode labels
+labels = to_categorical(labels, num_classes=15)
+
+# Split data
+X_train, X_temp, y_train, y_temp = train_test_split(signals, labels, test_size=0.3, random_state=42,stratify=labels)
+X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42,stratify=y_temp)
+
+# Build RNN Model with LSTM layers
+model = Sequential([
+    LSTM(units=64, activation='tanh', return_sequences=True, input_shape=(100, 1)),
+    Dropout(0.2),
+    LSTM(units=128, activation='tanh'),
+    Dropout(0.2),
+    Dense(units=128, activation='relu'),
+    Dense(units=15, activation='softmax')
+])
+
+# Define Adam optimizer
+optimizer = Adam(learning_rate=0.00170)
+
+# Compile the model
+model.compile(optimizer=optimizer,
+              loss='categorical_crossentropy',
+              metrics=['accuracy'])
+
+# Model summary
+model.summary()
+
+# Define the EarlyStopping callback
+early_stopping = EarlyStopping(
+    monitor='val_loss',          # Monitor validation loss
+    patience=20,                 # Number of epochs with no improvement after which training stops
+    restore_best_weights=True,   # Restore model weights from the epoch with the best value of the monitored metric
+    verbose=1                    # Print messages when stopping
+)
+
+# Train the model with early stopping
+history = model.fit(
+    X_train, y_train,
+    validation_data=(X_val, y_val),
+    epochs=150,
+    batch_size=32,
+    callbacks=[early_stopping],  # Add the early stopping callback
+    verbose=1
+)
+
+# Evaluate the model
+test_loss, test_acc = model.evaluate(X_test, y_test, verbose=1)
+print(f"Test Accuracy: {test_acc:.2f}")
+
+# Accuracy plot
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.title('Accuracy Over Epochs')
+plt.show()
+
+# Loss plot
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+plt.title('Loss Over Epochs')
+plt.show()
+
+# Confusion Matrix
+y_pred = np.argmax(model.predict(X_test), axis=-1)
+y_true = np.argmax(y_test, axis=-1)
+class_names = [
+    "Flicker","Harmonics", "Interruption","Notch", "Oscillatory Transient", "Pure Sinusoidal", "Sag", "Sag with Harmonics",
+    "Sag with Oscillatory Transient", "Swell", "Swell with Harmonics",
+    "Swell with Oscillatory Transient", "Transient"
+]
+
+cm = confusion_matrix(y_true, y_pred)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
+disp.plot(cmap=plt.cm.Blues, xticks_rotation=90)
+plt.title("Confusion Matrix")
+plt.xlabel("Predicted Class")
+plt.ylabel("True Class")
+plt.show()
+
+# Classification Report
+print("Classification Report:")
+ def plot_confusion_matrix(y_true, y_pred, title):
+    cm = confusion_matrix(y_true, y_pred)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
+    disp.plot(cmap=plt.cm.Blues, xticks_rotation=90)
+    plt.title(title)
+    plt.xlabel("Predicted Class")
+    plt.ylabel("True Class")
+    plt.show()
+
+ # Validation Confusion Matrix
+ y_val_pred = np.argmax(model.predict(X_val), axis=-1)
+ y_val_true = np.argmax(y_val, axis=-1)
+ plot_confusion_matrix(y_val_true, y_val_pred, "Validation Set Confusion Matrix")
+
+# Test Confusion Matrix
+y_test_pred = np.argmax(model.predict(X_test), axis=-1)
+y_test_true = np.argmax(y_test, axis=-1)
+plot_confusion_matrix(y_test_true, y_test_pred, "Test Set Confusion Matrix")
+
+import tensorflow as tf
+
+# Define the file path to save the model
+model_save_path = "/kaggle/working/my_lstm_model.keras"  # Use `.keras` extension (Recommended)
+
+# Save the entire model (architecture, weights, optimizer state)
+model.save(model_save_path)
+
+print(f"Model saved successfully at {model_save_path}")
+
+import tensorflow as tf
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from tensorflow.keras.utils import to_categorical  # Fixed import from keras.utils to tensorflow.keras.utils
+import warnings
+import time
+
+# Suppress UndefinedMetricWarning for cleaner output
+warnings.filterwarnings('ignore', category=UserWarning)
+
+# Define class names for 15 classes
+class_names = [
+    "Flicker","Flicker with Sag", "Flicker with Swell", "Harmonics", "Interruption",
+    "Notch", "Oscillatory Transient", "Pure Sinusoidal", "Sag", "Sag with Harmonics",
+    "Sag with Oscillatory Transient", "Swell", "Swell with Harmonics",
+    "Swell with Oscillatory Transient", "Transient"
+]
+
+# 1. Load Model
+print("Loading model...")
+model = tf.keras.models.load_model("/kaggle/working/my_lstm_model.keras")
+print("Model loaded successfully!\n")
+
+# 2. Load and Preprocess Data
+print("Loading and preprocessing data...")
+data = pd.read_csv('/kaggle/input/noise-data/Data13 with 40dB noise.csv', header=None)
+
+n_columns = data.shape[1]  # Total number of columns
+n_signals = n_columns - 1  # Number of signal columns (all except the last)
+signals = data.iloc[:, :n_signals].values  # All columns except the last
+labels = data.iloc[:, -1].values          # Last column as labels
+
+# Handle missing values
+signals = np.nan_to_num(signals, nan=0.0)
+
+# Standardize signals
+scaler = StandardScaler()
+signals = scaler.fit_transform(signals)
+
+# Reshape for LSTM (assuming the model expects this shape)
+signals = signals.reshape(signals.shape[0], signals.shape[1], 1)
+
+# One-hot encode labels
+# labels = to_categorical(labels, num_classes=15)
+
+# # Split data
+# X_train, X_temp, y_train, y_temp = train_test_split(signals, labels, test_size=0.4, random_state=42)
+# X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.3, random_state=42)
+
+# 3. Generate Predictions
+print("Generating predictions...")
+y_pred_probs = model.predict(signals, verbose=0)  # Get prediction probabilities
+y_pred = np.argmax(y_pred_probs, axis=-1)       # Convert to class indices
+# y_true = np.argmax(y_test, axis=-1)              # True labels from one-hot encoding
+y_true = labels
+print(y_pred.shape)
+print(y_true.shape)
+
+# 4. Identify Present Classes
+present_classes = np.unique(np.concatenate([y_true, y_pred]))
+present_class_names = [class_names[i] for i in present_classes]
+
+print("\nClasses present in evaluation:")
+for i, name in zip(present_classes, present_class_names):
+    print(f"{i}: {name}")
+
+# 5. Generate Metrics
+print("\nGenerating evaluation metrics...")
+
+# Classification Report (only for present classes)
+print("\nClassification Report:")
+print(classification_report(
+    y_true, 
+    y_pred, 
+    labels=present_classes,
+    target_names=present_class_names,
+    digits=4,
+    zero_division=0
+))
+
+# 6. Visualizations
+# Confusion Matrix - Present Classes Only
+plt.figure(figsize=(12, 10))
+cm = confusion_matrix(y_true, y_pred, labels=present_classes)
+disp = ConfusionMatrixDisplay(
+    confusion_matrix=cm,
+    display_labels=present_class_names
+)
+disp.plot(cmap='Blues', xticks_rotation=90, values_format='d')
+plt.title("Confusion Matrix - Present Classes Only", pad=10)
+plt.show()
+
+# Confusion Matrix - All Classes (for reference)
+plt.figure(figsize=(14, 12))
+full_cm = confusion_matrix(y_true, y_pred, labels=range(15))
+disp_full = ConfusionMatrixDisplay(
+    confusion_matrix=full_cm,
+    display_labels=class_names
+)
+disp_full.plot(cmap='Blues', xticks_rotation=90, values_format='d')
+plt.title("Confusion Matrix - All Classes", pad=10)
+plt.show()
+
+
+# Measure prediction time for the whole test set
+start_time = time.time()
+_ = model.predict(X_test, verbose=0)  # Ignore the returned prediction
+end_time = time.time()
+
+# Compute average time per sample
+total_time = end_time - start_time
+avg_time_per_sample = total_time / len(X_test)
+
+print(f"Average classification time per sample: {avg_time_per_sample * 1000:.4f} ms")
+print("\nEvaluation complete!")
+
+
+print(classification_report(y_true, y_pred, target_names=class_names))
